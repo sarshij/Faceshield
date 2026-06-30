@@ -175,29 +175,32 @@
         const grid = document.getElementById('face-grid');
         grid.innerHTML = '';
         
+        // Clear selection on every re-render so the user starts with a clean slate
         this.state.selectedFaceIds.clear();
 
         if (this.state.detectedFaces.length === 0) {
-            grid.innerHTML = '<p class="text-muted w-full col-span-full">No faces found automatically.</p>';
+            grid.innerHTML = '<p class="text-muted w-full col-span-full">No faces found automatically. Use "Add Manual Region" to mark areas manually.</p>';
         }
 
-        this.state.detectedFaces.forEach((face, i) => {
-            // Auto-select all by default
-            this.state.selectedFaceIds.add(face.id);
+        this.state.detectedFaces.forEach((face, i) => {
+            // Do NOT auto-select — user must click to choose who to blur
+            const isSelected = this.state.selectedFaceIds.has(face.id);
 
             const card = document.createElement('div');
-            card.className = 'face-card selected';
+            card.className = `face-card${isSelected ? ' selected' : ''}`;
             card.dataset.id = face.id;
 
-            // Use thumbnail if available, else a placeholder (for manual regions without full thumbnails yet)
+            // Use thumbnail if available, else a placeholder (for manual regions)
             const imgSrc = face.thumbnail_base64 
                 ? `data:image/jpeg;base64,${face.thumbnail_base64}`
-                : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" background="%2313131a"><text x="50%" y="50%" fill="%2364748b" font-family="sans-serif" font-size="14" text-anchor="middle" dominant-baseline="middle">Manual Region</text></svg>';
+                : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect width="100%" height="100%" fill="%2313131a"/><text x="50%" y="50%" fill="%2364748b" font-family="sans-serif" font-size="12" text-anchor="middle" dominant-baseline="middle">Manual Region</text></svg>';
+
+            const label = face.id.startsWith('manual') ? 'Manual Region' : `Person ${i + 1}`;
 
             card.innerHTML = `
-                <img src="${imgSrc}" class="face-img" alt="Face">
+                <img src="${imgSrc}" class="face-img" alt="${label}">
                 <div class="face-info">
-                    <span class="text-small">${face.id.startsWith('manual') ? 'Manual Region' : 'Face ' + (i+1)}</span>
+                    <span class="text-small">${label}</span>
                     <div class="face-checkbox">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5"/></svg>
                     </div>

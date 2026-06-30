@@ -84,11 +84,11 @@ async def process_video_task(session_id: str):
                 logger.info(f"Session {session_id} cancelled during processing.")
                 return
                 
-            # If frame is 0, initialize manual tracks
-            if frame_idx == 0:
-                for tf in target_faces:
-                    if tf["id"].startswith("manual_") and tf["frame_number"] == 0:
-                        tracker.add_manual_region(tf["id"], frame, tf["bbox"])
+            # Initialize manual tracks at their designated frame numbers
+            # (the frame where the user drew the box in the picker modal)
+            for tf in target_faces:
+                if tf["id"].startswith("manual_") and tf.get("frame_number", 0) == frame_idx:
+                    tracker.add_manual_region(tf["id"], frame, tf["bbox"])
                         
             # Run detection on every frame to feed DeepSORT properly
             detections = detector.detect_in_frame(frame, frame_idx)

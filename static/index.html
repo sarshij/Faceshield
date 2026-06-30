@@ -96,7 +96,11 @@
                     </div>
                 </div>
 
-                <p class="text-muted mb-6">We've automatically detected these individuals across the video. Uncheck any faces you don't want to blur.</p>
+                <!-- Hint banner explaining click-to-select -->
+                <div class="select-hint mb-6">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>All faces detected across the video are listed below. <strong>Click a face to select it for blurring.</strong> Unselected faces will be left untouched.</span>
+                </div>
 
                 <!-- Loading Skeleton -->
                 <div id="detect-skeleton" class="face-grid hidden">
@@ -111,30 +115,73 @@
                 </div>
 
                 <div class="manual-region-action mt-6 text-center">
-                    <p class="text-muted mb-2">Missed someone?</p>
+                    <p class="text-muted mb-2">Need to blur something the AI missed? (a logo, badge, license plate...)</p>
                     <button id="btn-add-manual" class="btn btn-secondary">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                         Add Manual Region
                     </button>
                 </div>
 
-                <!-- Manual Region Canvas Area (Hidden by default) -->
-                <div id="manual-region-container" class="card mt-4 hidden">
-                    <h3>Draw Bounding Box</h3>
-                    <p class="text-small text-muted mb-4">Click and drag over the face you want to hide.</p>
-                    <div class="canvas-wrapper">
-                        <canvas id="manual-canvas"></canvas>
-                    </div>
-                    <div class="flex-end mt-4 gap-2">
-                        <button id="btn-cancel-manual" class="btn btn-secondary">Cancel</button>
-                        <button id="btn-confirm-manual" class="btn btn-primary">Add Region</button>
-                    </div>
-                </div>
-
                 <div class="flex-end mt-8">
                     <button id="btn-next-settings" class="btn btn-primary btn-lg">Next: Blur Settings →</button>
                 </div>
             </section>
+
+            <!-- ══════════════════════════════════════════════════ -->
+            <!-- LIVE VIDEO PICKER MODAL (Manual Region Selection) -->
+            <!-- ══════════════════════════════════════════════════ -->
+            <div id="video-picker-modal" class="video-picker-modal hidden">
+                <div class="video-picker-card">
+
+                    <!-- Header -->
+                    <div class="video-picker-header">
+                        <div class="video-picker-header-text">
+                            <h3>Add Manual Blur Region</h3>
+                            <p>Play the video to the moment you want, then click <strong>Draw Box</strong> and drag over the area to blur.</p>
+                        </div>
+                        <button id="btn-picker-close" class="btn btn-secondary btn-sm">✕ Close</button>
+                    </div>
+
+                    <!-- Video Viewport -->
+                    <div class="video-picker-viewport">
+                        <video id="picker-video" class="picker-video" muted playsinline preload="metadata"></video>
+
+                        <!-- Fabric.js canvas overlay for drawing -->
+                        <div id="picker-canvas-wrapper" class="picker-canvas-wrapper">
+                            <div class="draw-mode-hint">✏️ Click and drag to draw a box — release to finish</div>
+                            <canvas id="picker-canvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Playback Controls -->
+                    <div class="video-picker-controls">
+                        <button id="picker-play-btn" class="picker-play-btn" title="Play/Pause (Space)">
+                            <!-- Play icon -->
+                            <svg id="picker-play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
+                            <!-- Pause icon (hidden) -->
+                            <svg id="picker-pause-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        </button>
+
+                        <input type="range" id="picker-timeline" class="picker-timeline" min="0" max="1000" value="0" step="1">
+
+                        <span id="picker-time-label" class="picker-time-label">0:00 / 0:00</span>
+                    </div>
+
+                    <!-- Footer Actions -->
+                    <div class="video-picker-footer">
+                        <div id="picker-mode-indicator" class="picker-mode-indicator">
+                            <span class="dot"></span>
+                            <span id="picker-mode-text">Watching — pause to draw a box</span>
+                        </div>
+                        <div style="display:flex; gap: 0.75rem; align-items: center;">
+                            <button id="btn-picker-draw" class="btn btn-secondary">✏️ Draw Box</button>
+                            <button id="btn-picker-clear" class="btn btn-secondary" style="display:none">Clear Box</button>
+                            <button id="btn-picker-confirm" class="btn btn-primary" disabled>Add Region</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
 
             <!-- STEP 3: SETTINGS -->
             <section id="step-settings" class="step-section hidden">
@@ -299,5 +346,14 @@
     <script src="/static/js/uploader.js"></script>
     <script src="/static/js/canvas.js"></script>
     <script src="/static/js/player.js"></script>
+    <!-- Keyboard shortcut: Space = play/pause in modal -->
+    <script>
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !document.getElementById('video-picker-modal').classList.contains('hidden')) {
+                e.preventDefault();
+                document.getElementById('picker-play-btn').click();
+            }
+        });
+    </script>
 </body>
 </html>

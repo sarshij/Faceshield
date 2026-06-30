@@ -45,3 +45,9 @@ Open your web browser and navigate to: **http://localhost:8000**
 
 ---
 Built by SARSHIJ KARN
+
+##shortcut
+1. cd faceshield
+2. .\venv\Scripts\Activate.ps1
+3. uvicorn main:app --reload
+4. http://localhost:8000

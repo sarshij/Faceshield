@@ -37,15 +37,16 @@ class FaceBlurrer:
 
     def _apply_gaussian(self, face_region: np.ndarray) -> np.ndarray:
         """Apply Gaussian blur."""
-        # Map intensity 1-100 to kernel size (must be odd)
-        # Intensity 1 -> 3, Intensity 100 -> 99
-        k = int((self.intensity / 100.0) * 96) + 3
+        # Significantly increase kernel size for heavier blur
+        k = int((self.intensity / 100.0) * 150) + 15
         if k % 2 == 0:
             k += 1
             
         blurred = cv2.GaussianBlur(face_region, (k, k), 0)
         
-        # Double pass for high intensity
+        # Multiple passes for higher intensity
+        if self.intensity >= 40:
+            blurred = cv2.GaussianBlur(blurred, (k, k), 0)
         if self.intensity >= 80:
             blurred = cv2.GaussianBlur(blurred, (k, k), 0)
             
@@ -55,10 +56,8 @@ class FaceBlurrer:
         """Apply Pixelation effect."""
         h, w = face_region.shape[:2]
         
-        # Map intensity 1-100 to downsample factor
-        # Higher intensity = smaller factor (more pixelated)
-        # e.g., intensity 100 -> divide by 20. intensity 1 -> divide by 2
-        factor = int((self.intensity / 100.0) * 18) + 2
+        # Increase downsample factor for larger blocks (heavier pixelation)
+        factor = int((self.intensity / 100.0) * 35) + 5
         
         small_w = max(1, w // factor)
         small_h = max(1, h // factor)
@@ -77,16 +76,17 @@ class FaceBlurrer:
         # Create a black image
         black = np.zeros_like(face_region)
         
-        # We can use intensity to control feathering
-        # Higher intensity = sharper edges, Lower intensity = more feathered
-        feather_amount = int((100 - self.intensity) / 100.0 * min(w, h) * 0.4)
+        # Lower feather amount so the black box is more prominent and opaque
+        feather_amount = int((100 - self.intensity) / 100.0 * min(w, h) * 0.15)
         
         if feather_amount > 0:
             # Create mask for feathering
             mask = np.zeros((h, w), dtype=np.float32)
             cv2.rectangle(mask, (feather_amount, feather_amount), 
                           (w - feather_amount, h - feather_amount), 1.0, -1)
-            mask = cv2.GaussianBlur(mask, (feather_amount*2+1, feather_amount*2+1), 0)
+            
+            k = feather_amount * 2 + 1
+            mask = cv2.GaussianBlur(mask, (k, k), 0)
             
             mask_3c = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
             
