@@ -5,11 +5,12 @@ Multi-face tracking using DeepSORT to follow faces across frames.
 Handles occlusion and brief disappearances by associating new detections
 with existing track IDs.
 
-Also manages manual bounding boxes using basic optical flow tracking.
+Also manages manual bounding boxes using CSRT tracking.
 """
 
 import cv2
 import numpy as np
+import base64
 from typing import List, Dict, Optional, Tuple
 
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -28,29 +29,50 @@ class FaceTracker:
         wants to blur (each dict contains 'id' and 'embedding').
         """
         self.tracker = DeepSort(
-            max_age=30,             # Keep track alive for 30 frames if lost
+            max_age=60,             # Keep track alive for 60 frames (2 seconds at 30fps)
             n_init=3,               # Needs 3 consecutive hits to confirm track
             nms_max_overlap=1.0,    # Disable NMS, we rely on detector
             max_cosine_distance=0.4,# Strict matching
-            embedder=None           # Use our custom 352-d embeddings
+            embedder="mobilenet"    # Re-enable deep_sort's robust built-in embedder for whole-video tracking
         )
         
-        # We need to map DeepSORT's internal track IDs (1, 2, 3...) 
-        # to our application's face IDs (face_1, manual_1, etc.)
         self.target_faces = target_face_embeddings
-        
-        # mapping: deepsort_track_id (int) -> our_face_id (str)
         self.track_to_face_id: Dict[int, str] = {}
-        
-        # Keep track of manual region tracking (optical flow)
         self.manual_tracks: Dict[str, Dict] = {}
-        # Format: { "manual_1": {"prev_frame": gray, "bbox": [x,y,w,h]} }
+
+        # 1. Update target_faces with DeepSort's superior MobileNetV2 embeddings for re-identification!
+        for tface in self.target_faces:
+            if not tface["id"].startswith("manual_") and tface.get("thumbnail_base64"):
+                try:
+                    # Decode thumbnail to get original face crop
+                    # Strip data URI prefix if it exists
+                    b64_data = tface["thumbnail_base64"]
+                    if "," in b64_data:
+                        b64_data = b64_data.split(",")[1]
+                        
+                    img_data = base64.b64decode(b64_data)
+                    nparr = np.frombuffer(img_data, np.uint8)
+                    face_crop = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    
+                    if face_crop is not None and face_crop.size > 0:
+                        # Extract the robust 1280-d embedding
+                        features = self.tracker.embedder.predict([face_crop])
+                        if features and len(features) > 0:
+                            tface["embedding"] = features[0]
+                except Exception as e:
+                    import traceback
+                    print(f"Failed to extract DeepSORT feature for target face {tface['id']}: {e}")
+                    traceback.print_exc()
 
     def add_manual_region(self, face_id: str, frame: np.ndarray, bbox: List[int]) -> None:
-        """Initialise optical flow tracking for a manual region."""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        """Initialise robust CSRT tracking for a manual region."""
+        # CSRT tracker is significantly more robust than optical flow
+        tracker = cv2.TrackerCSRT_create()
+        # Initialize the tracker with the frame and bounding box
+        tracker.init(frame, tuple(bbox))
+        
         self.manual_tracks[face_id] = {
-            "prev_frame": gray,
+            "tracker": tracker,
             "bbox": list(bbox)
         }
 
@@ -58,21 +80,16 @@ class FaceTracker:
         """
         Update the tracker with the latest frame and detections.
         Returns a list of dicts specifying which regions to blur.
-        
-        detections format from detector: 
-        { "bbox": [x,y,w,h], "confidence": float, "embedding": np.ndarray, ... }
         """
         # 1. Update DeepSORT for auto-detected faces
-        # format required by deep_sort_realtime: ( [left,top,w,h], confidence, detection_class )
         ds_detections = []
-        ds_embeds = []
         for det in detections:
             ds_detections.append(
                 (det["bbox"], det["confidence"], "face")
             )
-            ds_embeds.append(det["embedding"])
         
-        tracks = self.tracker.update_tracks(ds_detections, embeds=ds_embeds, frame=frame)
+        # We pass embeds=None so DeepSort extracts its own robust 1280-d features from the frame
+        tracks = self.tracker.update_tracks(ds_detections, embeds=None, frame=frame)
         
         regions_to_blur: List[Dict] = []
         
@@ -84,19 +101,19 @@ class FaceTracker:
             
             # If we haven't linked this DeepSORT track to a known face yet
             if track_id not in self.track_to_face_id and track.features:
-                # Compare the track's latest feature with our target faces
-                # (Simple nearest-neighbour matching for the first few frames)
                 best_face_id = None
                 best_sim = 0.0
                 
-                track_emb = track.features[-1]
+                track_emb = track.features[-1] # This is a 1280-d MobileNetV2 feature
                 
                 from scipy.spatial.distance import cosine
                 for tface in self.target_faces:
-                    if tface["embedding"] is None:
+                    if tface["embedding"] is None or len(tface["embedding"]) != 1280:
                         continue
                     sim = 1.0 - cosine(track_emb, tface["embedding"])
-                    if sim > 0.65 and sim > best_sim: # Threshold for matching
+                    
+                    # Because we are using high-quality 1280-d features, we can lower the threshold slightly to catch re-entries
+                    if sim > 0.40 and sim > best_sim: 
                         best_face_id = tface["id"]
                         best_sim = sim
                 
@@ -119,56 +136,30 @@ class FaceTracker:
                     "bbox": [x1, y1, x2 - x1, y2 - y1]
                 })
 
-        # 2. Update manual regions using Optical Flow (CSRT or KCF could be used, 
-        # but optical flow is fast enough for generic region tracking if no face is detected)
-        # To keep it simple and robust, if it's a manual region, we'll try to just track it 
-        # using cv2.calcOpticalFlowPyrLK
-        curr_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
+        # 2. Update manual regions using highly robust CSRT tracker
         for m_id, m_data in self.manual_tracks.items():
-            prev_gray = m_data["prev_frame"]
-            x, y, bw, bh = m_data["bbox"]
+            tracker = m_data["tracker"]
+            old_bbox = m_data["bbox"]
             
-            # Define points to track (corners and center of the bbox)
-            points = np.array([
-                [x, y], [x + bw, y], [x, y + bh], [x + bw, y + bh],
-                [x + bw/2, y + bh/2]
-            ], dtype=np.float32).reshape(-1, 1, 2)
+            # Update the CSRT tracker
+            success, new_bbox = tracker.update(frame)
             
-            # Calculate optical flow
-            new_points, status, _ = cv2.calcOpticalFlowPyrLK(
-                prev_gray, curr_gray, points, None,
-                winSize=(15, 15), maxLevel=2,
-                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03)
-            )
-            
-            # If tracking was somewhat successful
-            if new_points is not None and status is not None and sum(status) > 2:
-                # Calculate movement
-                good_new = new_points[status == 1]
-                good_old = points[status == 1]
+            if success:
+                x, y, w, h = [int(v) for v in new_bbox]
+                # Ensure it stays somewhat within frame bounds
+                x = max(0, min(frame.shape[1]-1, x))
+                y = max(0, min(frame.shape[0]-1, y))
                 
-                # Average displacement
-                dx = int(np.mean(good_new[:, 0] - good_old[:, 0]))
-                dy = int(np.mean(good_new[:, 1] - good_old[:, 1]))
-                
-                new_x = max(0, x + dx)
-                new_y = max(0, y + dy)
-                
-                # Update stored state
-                self.manual_tracks[m_id]["bbox"] = [new_x, new_y, bw, bh]
-                self.manual_tracks[m_id]["prev_frame"] = curr_gray
-                
+                self.manual_tracks[m_id]["bbox"] = [x, y, w, h]
                 regions_to_blur.append({
                     "id": m_id,
-                    "bbox": [new_x, new_y, bw, bh]
+                    "bbox": [x, y, w, h]
                 })
             else:
-                # Lost track, just use old bbox and update frame
+                # Lost track, just use old bbox and hope it recovers (or stays still)
                 regions_to_blur.append({
                     "id": m_id,
-                    "bbox": [x, y, bw, bh]
+                    "bbox": old_bbox
                 })
-                self.manual_tracks[m_id]["prev_frame"] = curr_gray
                 
         return regions_to_blur
