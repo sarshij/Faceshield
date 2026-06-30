@@ -3,7 +3,7 @@
    State machine, UI navigation, and central event bus.
    ========================================================================== */
 
-   const App = {
+const App = {
     state: {
         sessionId: null,
         videoMetadata: null,
@@ -48,16 +48,19 @@
             });
         });
 
-        // Navigation
+        // Navigation — forward
         document.getElementById('btn-next-settings').addEventListener('click', () => {
             this.goToStep(3);
             this.initLivePreview();
         });
+
+        // Navigation — back buttons
+        document.getElementById('btn-back-upload').addEventListener('click', () => this.goToStep(1));
         document.getElementById('btn-back-detect').addEventListener('click', () => this.goToStep(2));
-        
+
         // Processing
         document.getElementById('btn-start-process').addEventListener('click', () => this.startProcessing());
-        
+
         // Cancel Processing
         const btnCancel = document.getElementById('btn-cancel-process');
         const cancelMsg = document.getElementById('cancel-confirm-msg');
@@ -70,7 +73,7 @@
             }
         });
 
-        // Reprocess
+        // Reprocess — go back to detect step to re-select faces
         const btnReprocess = document.getElementById('btn-reprocess');
         const reprocessMsg = document.getElementById('reprocess-confirm-msg');
         btnReprocess.addEventListener('click', () => {
@@ -79,7 +82,7 @@
                 setTimeout(() => reprocessMsg.classList.add('hidden'), 3000);
             } else {
                 reprocessMsg.classList.add('hidden');
-                this.goToStep(3);
+                this.goToStep(2);
                 Player.stop();
             }
         });
@@ -127,8 +130,8 @@
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        
-        const icon = type === 'success' 
+
+        const icon = type === 'success'
             ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
             : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
 
@@ -141,11 +144,11 @@
         }, 3000);
     },
 
-    // ── Face Grid Logic ──
+    // ── Face Grid Logic ──────────────────────────
     async triggerDetection(sessionId) {
         this.state.sessionId = sessionId;
         this.goToStep(2);
-        
+
         document.getElementById('detect-skeleton').classList.remove('hidden');
         document.getElementById('face-grid').classList.add('hidden');
 
@@ -156,7 +159,7 @@
                 body: JSON.stringify({ session_id: sessionId })
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 this.state.detectedFaces = data.faces;
                 this.renderFaceGrid();
@@ -174,7 +177,7 @@
     renderFaceGrid() {
         const grid = document.getElementById('face-grid');
         grid.innerHTML = '';
-        
+
         // Clear selection on every re-render so the user starts with a clean slate
         this.state.selectedFaceIds.clear();
 
@@ -182,8 +185,7 @@
             grid.innerHTML = '<p class="text-muted w-full col-span-full">No faces found automatically. Use "Add Manual Region" to mark areas manually.</p>';
         }
 
-        this.state.detectedFaces.forEach((face, i) => {
-            // Do NOT auto-select — user must click to choose who to blur
+        this.state.detectedFaces.forEach((face, i) => {
             const isSelected = this.state.selectedFaceIds.has(face.id);
 
             const card = document.createElement('div');
@@ -191,7 +193,7 @@
             card.dataset.id = face.id;
 
             // Use thumbnail if available, else a placeholder (for manual regions)
-            const imgSrc = face.thumbnail_base64 
+            const imgSrc = face.thumbnail_base64
                 ? `data:image/jpeg;base64,${face.thumbnail_base64}`
                 : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect width="100%" height="100%" fill="%2313131a"/><text x="50%" y="50%" fill="%2364748b" font-family="sans-serif" font-size="12" text-anchor="middle" dominant-baseline="middle">Manual Region</text></svg>';
 
@@ -201,20 +203,30 @@
                 <img src="${imgSrc}" class="face-img" alt="${label}">
                 <div class="face-info">
                     <span class="text-small">${label}</span>
+                    <span class="face-status ${isSelected ? 'status-blurred' : 'status-safe'}">
+                        ${isSelected ? 'BLURRED' : 'NOT BLURRED'}
+                    </span>
                     <div class="face-checkbox">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5"/></svg>
                     </div>
                 </div>
             `;
 
+            // Toggle selection on click
             card.addEventListener('click', () => {
+                const statusEl = card.querySelector('.face-status');
                 if (this.state.selectedFaceIds.has(face.id)) {
                     this.state.selectedFaceIds.delete(face.id);
                     card.classList.remove('selected');
+                    statusEl.textContent = 'NOT BLURRED';
+                    statusEl.className = 'face-status status-safe';
                 } else {
                     this.state.selectedFaceIds.add(face.id);
                     card.classList.add('selected');
+                    statusEl.textContent = 'BLURRED';
+                    statusEl.className = 'face-status status-blurred';
                 }
+                this._updateSelectionCounter();
             });
 
             grid.appendChild(card);
@@ -222,23 +234,47 @@
 
         // Setup Select/Deselect All
         document.getElementById('btn-select-all').onclick = () => {
-            document.querySelectorAll('.face-card').forEach(c => c.classList.add('selected'));
+            document.querySelectorAll('.face-card').forEach(c => {
+                c.classList.add('selected');
+                const s = c.querySelector('.face-status');
+                if (s) { s.textContent = 'BLURRED'; s.className = 'face-status status-blurred'; }
+            });
             this.state.detectedFaces.forEach(f => this.state.selectedFaceIds.add(f.id));
+            this._updateSelectionCounter();
         };
         document.getElementById('btn-deselect-all').onclick = () => {
-            document.querySelectorAll('.face-card').forEach(c => c.classList.remove('selected'));
+            document.querySelectorAll('.face-card').forEach(c => {
+                c.classList.remove('selected');
+                const s = c.querySelector('.face-status');
+                if (s) { s.textContent = 'NOT BLURRED'; s.className = 'face-status status-safe'; }
+            });
             this.state.selectedFaceIds.clear();
+            this._updateSelectionCounter();
         };
+
+        // Initial counter update
+        this._updateSelectionCounter();
     },
 
-    // ── Live Preview (Client-side simulation) ──
+    _updateSelectionCounter() {
+        // Update the "Next" button to show how many faces are selected
+        const btn = document.getElementById('btn-next-settings');
+        const count = this.state.selectedFaceIds.size;
+        if (count === 0) {
+            btn.textContent = 'Next: Blur Settings →';
+        } else {
+            btn.textContent = `Next: Blur ${count} Face${count > 1 ? 's' : ''} →`;
+        }
+    },
+
+    // ── Live Preview (Client-side simulation) ──────
     initLivePreview() {
         const canvas = document.getElementById('live-preview-canvas');
         const ctx = canvas.getContext('2d');
-        
+
         // Find the first selected face that has a thumbnail
         const selectedFace = this.state.detectedFaces.find(f => this.state.selectedFaceIds.has(f.id) && f.thumbnail_base64);
-        
+
         if (selectedFace) {
             const img = new Image();
             img.onload = () => {
@@ -281,13 +317,13 @@
             const factor = Math.floor((intensity / 100) * 18) + 2;
             const smallW = w / factor;
             const smallH = h / factor;
-            
+
             // Draw small
             const off = document.createElement('canvas');
             off.width = smallW; off.height = smallH;
             const offCtx = off.getContext('2d');
             offCtx.drawImage(this.livePreviewBaseImage, 0, 0, smallW, smallH);
-            
+
             // Scale up (disable smoothing for pixelation)
             ctx.imageSmoothingEnabled = false;
             ctx.drawImage(off, 0, 0, smallW, smallH, 0, 0, w, h);
@@ -295,13 +331,10 @@
         } else if (type === 'black box') {
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, w, h);
-            // Simulate feathering by just drawing a slightly smaller black box
-            // if intensity is low, but client-side feathering is complex,
-            // so we keep it simple for the preview.
         }
     },
 
-    // ── Processing ──
+    // ── Processing ──────────────────────────────
     async startProcessing() {
         if (this.state.selectedFaceIds.size === 0) {
             this.showToast('Please go back and select at least one face to blur.', 'error');
@@ -309,7 +342,7 @@
         }
 
         this.goToStep(4);
-        
+
         // Reset UI
         document.getElementById('process-percentage').textContent = '0%';
         document.getElementById('process-linear-bar').style.width = '0%';
@@ -346,24 +379,24 @@
 
     connectSSE() {
         if (this.state.eventSource) this.state.eventSource.close();
-        
+
         this.state.eventSource = new EventSource(`/api/progress/${this.state.sessionId}`);
-        
+
         this.state.eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
+
             document.getElementById('process-stage-label').textContent = data.stage;
             document.getElementById('process-percentage').textContent = `${data.percent}%`;
-            
+
             // Linear bar
             document.getElementById('process-linear-bar').style.width = `${data.percent}%`;
-            
+
             // Circle (dashoffset 283 = 0%, 0 = 100%)
             const offset = 283 - (283 * (data.percent / 100));
             document.getElementById('process-circle').style.strokeDashoffset = offset;
-            
+
             document.getElementById('process-frame-count').textContent = `${data.frame} / ${data.total}`;
-            
+
             const m = Math.floor(data.eta / 60).toString().padStart(2, '0');
             const s = (data.eta % 60).toString().padStart(2, '0');
             document.getElementById('process-eta').textContent = `${m}:${s}`;
@@ -377,7 +410,7 @@
                 this.goToStep(3);
             }
         };
-        
+
         this.state.eventSource.onerror = () => {
             this.state.eventSource.close();
             this.showToast('Connection to server lost.', 'error');
@@ -386,11 +419,11 @@
 
     async cancelProcessing() {
         if (this.state.eventSource) this.state.eventSource.close();
-        
+
         try {
             await fetch(`/api/session/${this.state.sessionId}`, { method: 'DELETE' });
             this.showToast('Processing cancelled.');
-            
+
             // Hard reset to step 1
             setTimeout(() => location.reload(), 1000);
         } catch(e) {
@@ -415,18 +448,18 @@
         // Show cleanup timer
         const warning = document.getElementById('cleanup-warning');
         warning.classList.remove('hidden');
-        
+
         let timeLeft = 5 * 60; // 5 mins
         const timerEl = document.getElementById('cleanup-timer');
-        
+
         if (this.cleanupInterval) clearInterval(this.cleanupInterval);
-        
+
         this.cleanupInterval = setInterval(() => {
             timeLeft--;
             const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
             const s = (timeLeft % 60).toString().padStart(2, '0');
             timerEl.textContent = `${m}:${s}`;
-            
+
             if (timeLeft <= 0) clearInterval(this.cleanupInterval);
         }, 1000);
     }

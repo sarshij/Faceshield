@@ -40,11 +40,11 @@ CLEANUP_INTERVAL = 60                               # Sweep every 60 s
 # ──────────────────────────────────────────────
 # Face Detection
 # ──────────────────────────────────────────────
-SAMPLE_INTERVAL_SECONDS = 2                         # Sample every 2 s for detection
-MIN_FACE_CONFIDENCE = 0.5                           # MediaPipe detection threshold
+SAMPLE_INTERVAL_SECONDS = 0.5                       # Sample every 0.5 s — 4x more frames for better face coverage
+MIN_FACE_CONFIDENCE = 0.35                          # Lowered to catch side-profile and distant faces
 INSIGHTFACE_FALLBACK_THRESHOLD = 0.6                # Try InsightFace below this
-FACE_SIMILARITY_THRESHOLD = 0.65                    # Cosine sim for clustering
-FACE_THUMBNAIL_SIZE = (128, 128)                    # Thumbnail pixel dimensions
+FACE_SIMILARITY_THRESHOLD = 0.50                    # Tighter clustering — avoid merging different people
+FACE_THUMBNAIL_SIZE = (160, 160)                    # Larger thumbnails for better re-ID embeddings
 
 # ──────────────────────────────────────────────
 # Video Processing
@@ -52,7 +52,8 @@ FACE_THUMBNAIL_SIZE = (128, 128)                    # Thumbnail pixel dimensions
 FRAME_CHUNK_SIZE = 100                              # In-memory frame batch size
 BLUR_BBOX_PADDING = 0.15                            # 15 % padding around face bbox
 PREVIEW_DURATION = 5                                # First N seconds for preview
-DETECTION_FRAME_SKIP = 2                            # Detect every Nth frame during processing
+DETECTION_FRAME_SKIP = 1                            # Detect EVERY frame during processing for robust tracking
+MIN_FACE_SIZE_PX = 5                                # Minimum face bbox dimension in pixels
 
 # ──────────────────────────────────────────────
 # Output Encoding (FFmpeg)

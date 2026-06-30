@@ -47,8 +47,14 @@ async def process_video_task(session_id: str):
             progress={"stage": "Initializing...", "percent": 0, "frame": 0, "total": total_frames, "eta": 0}
         )
         
-        # Get target faces
-        target_faces = [f for f in session["detected_faces"] if f["id"] in session["selected_face_ids"]]
+        # Get ONLY the faces the user explicitly selected for blurring
+        selected_ids = set(session["selected_face_ids"])
+        target_faces = [f for f in session["detected_faces"] if f["id"] in selected_ids]
+        
+        logger.info(
+            "Processing session %s: %d selected faces out of %d detected — IDs: %s",
+            session_id, len(target_faces), len(session["detected_faces"]), list(selected_ids)
+        )
         
         tracker = FaceTracker(target_faces)
         detector = FaceDetector()
@@ -96,9 +102,13 @@ async def process_video_task(session_id: str):
             # Track and get blur regions
             regions_to_blur = tracker.update(frame, detections)
             
-            # Apply blur
+            # ── SAFETY NET: Only blur faces the user explicitly selected ──
+            # This is the ultimate guard against false-positive blurring.
+            # Even if the tracker incorrectly links a track to a face,
+            # we verify the face ID is in the user's selection before blurring.
             for region in regions_to_blur:
-                frame = blurrer.apply(frame, region["bbox"])
+                if region["id"] in selected_ids or region["id"].startswith("manual_"):
+                    frame = blurrer.apply(frame, region["bbox"])
                 
             out.write(frame)
             frame_idx += 1

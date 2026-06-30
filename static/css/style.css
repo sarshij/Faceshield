@@ -329,8 +329,10 @@ h3 { font-size: 1.1rem; }
 .face-info {
     padding: 0.75rem;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 0.25rem;
     background: var(--bg-darker);
 }
 
@@ -351,6 +353,25 @@ h3 { font-size: 1.1rem; }
     opacity: 0; transition: opacity var(--transition);
 }
 .face-card.selected .face-checkbox svg { opacity: 1; }
+
+/* Face status labels (BLURRED / NOT BLURRED) */
+.face-status {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    transition: all var(--transition);
+}
+.face-status.status-safe {
+    color: var(--success);
+    background: rgba(16, 185, 129, 0.12);
+}
+.face-status.status-blurred {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.15);
+}
 
 /* ── Skeleton Shimmer ── */
 @keyframes shimmer {
