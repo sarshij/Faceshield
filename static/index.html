@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceShield — Privacy-First Video Blurring</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h1>FaceShield</h1>
+            </div>
+            
+            <!-- Stepper -->
+            <nav class="stepper">
+                <div class="step active" data-step="1">
+                    <div class="step-indicator">1</div>
+                    <span>Upload</span>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="2">
+                    <div class="step-indicator">2</div>
+                    <span>Detect</span>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="3">
+                    <div class="step-indicator">3</div>
+                    <span>Settings</span>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="4">
+                    <div class="step-indicator">4</div>
+                    <span>Process</span>
+                </div>
+                <div class="step-line"></div>
+                <div class="step" data-step="5">
+                    <div class="step-indicator">5</div>
+                    <span>Output</span>
+                </div>
+            </nav>
+        </header>
+
+        <main class="content-area">
+            
+            <!-- STEP 1: UPLOAD -->
+            <section id="step-upload" class="step-section active">
+                <div class="card upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" accept=".mp4,.mov,.avi,.mkv,.webm" hidden>
+                    <div class="upload-content">
+                        <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                        </svg>
+                        <h2>Drag & drop your video here</h2>
+                        <p class="text-muted">or <button id="browse-btn" class="text-btn">Browse Files</button></p>
+                        <p class="text-small text-muted mt-4">Supported: MP4, MOV, AVI, MKV, WebM</p>
+                        <p class="text-small text-muted">Max size: 2GB</p>
+                    </div>
+                </div>
+
+                <!-- Upload Progress -->
+                <div id="upload-progress-container" class="card mt-4 hidden">
+                    <div class="flex-between">
+                        <span id="upload-filename" class="font-mono text-small">filename.mp4</span>
+                        <span id="upload-percentage" class="font-mono text-small text-accent">0%</span>
+                    </div>
+                    <div class="progress-bar-bg mt-2">
+                        <div id="upload-progress-bar" class="progress-bar-fill"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 2: DETECT -->
+            <section id="step-detect" class="step-section hidden">
+                <div class="flex-between mb-4">
+                    <h2>Select Faces to Blur</h2>
+                    <div class="action-group">
+                        <button id="btn-select-all" class="btn btn-secondary btn-sm">Select All</button>
+                        <button id="btn-deselect-all" class="btn btn-secondary btn-sm">Deselect All</button>
+                    </div>
+                </div>
+
+                <p class="text-muted mb-6">We've automatically detected these individuals across the video. Uncheck any faces you don't want to blur.</p>
+
+                <!-- Loading Skeleton -->
+                <div id="detect-skeleton" class="face-grid hidden">
+                    <div class="face-card skeleton"></div>
+                    <div class="face-card skeleton"></div>
+                    <div class="face-card skeleton"></div>
+                    <div class="face-card skeleton"></div>
+                </div>
+
+                <div id="face-grid" class="face-grid">
+                    <!-- Face cards injected here by JS -->
+                </div>
+
+                <div class="manual-region-action mt-6 text-center">
+                    <p class="text-muted mb-2">Missed someone?</p>
+                    <button id="btn-add-manual" class="btn btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        Add Manual Region
+                    </button>
+                </div>
+
+                <!-- Manual Region Canvas Area (Hidden by default) -->
+                <div id="manual-region-container" class="card mt-4 hidden">
+                    <h3>Draw Bounding Box</h3>
+                    <p class="text-small text-muted mb-4">Click and drag over the face you want to hide.</p>
+                    <div class="canvas-wrapper">
+                        <canvas id="manual-canvas"></canvas>
+                    </div>
+                    <div class="flex-end mt-4 gap-2">
+                        <button id="btn-cancel-manual" class="btn btn-secondary">Cancel</button>
+                        <button id="btn-confirm-manual" class="btn btn-primary">Add Region</button>
+                    </div>
+                </div>
+
+                <div class="flex-end mt-8">
+                    <button id="btn-next-settings" class="btn btn-primary btn-lg">Next: Blur Settings →</button>
+                </div>
+            </section>
+
+            <!-- STEP 3: SETTINGS -->
+            <section id="step-settings" class="step-section hidden">
+                <h2>Blur Settings</h2>
+                
+                <div class="settings-layout mt-6">
+                    <!-- Controls -->
+                    <div class="settings-controls">
+                        <div class="card mb-6">
+                            <h3 class="mb-4">Blur Type</h3>
+                            <div class="segmented-control" id="blur-type-selector">
+                                <button class="segment active" data-value="gaussian">Gaussian</button>
+                                <button class="segment" data-value="pixelate">Pixelate</button>
+                                <button class="segment" data-value="black box">Black Box</button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="flex-between mb-4">
+                                <h3>Intensity</h3>
+                                <span id="intensity-val" class="font-mono text-accent">50</span>
+                            </div>
+                            
+                            <input type="range" id="intensity-slider" class="styled-slider" min="1" max="100" value="50">
+                            
+                            <div class="slider-labels mt-2">
+                                <span class="slider-label" data-snap="20">Low</span>
+                                <span class="slider-label" data-snap="50">Medium</span>
+                                <span class="slider-label" data-snap="80">High</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Preview -->
+                    <div class="settings-preview">
+                        <div class="card h-full flex-center flex-col">
+                            <h3 class="mb-4 self-start">Live Preview</h3>
+                            <div class="preview-canvas-wrapper">
+                                <canvas id="live-preview-canvas" width="200" height="200"></canvas>
+                            </div>
+                            <p class="text-small text-muted mt-4 text-center">Effect will be applied to all selected faces, padded by 15% for safety.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-end mt-8 gap-4">
+                    <button id="btn-back-detect" class="btn btn-secondary btn-lg">← Back</button>
+                    <button id="btn-start-process" class="btn btn-primary btn-lg shine-effect">Start Processing</button>
+                </div>
+            </section>
+
+            <!-- STEP 4: PROCESS -->
+            <section id="step-process" class="step-section hidden">
+                <div class="card process-card text-center relative overflow-hidden">
+                    <!-- Shimmer BG -->
+                    <div class="shimmer-bg"></div>
+                    
+                    <div class="process-content relative z-10">
+                        <h2 id="process-stage-label" class="mb-8">Initializing...</h2>
+                        
+                        <!-- Circular Progress -->
+                        <div class="circular-progress">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="progress" cx="50" cy="50" r="45" id="process-circle"></circle>
+                            </svg>
+                            <div class="percentage font-mono" id="process-percentage">0%</div>
+                        </div>
+
+                        <div class="stats-grid mt-8 mb-8">
+                            <div class="stat-item">
+                                <span class="text-muted text-small">FRAME</span>
+                                <span class="font-mono" id="process-frame-count">0 / 0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="text-muted text-small">ETA</span>
+                                <span class="font-mono text-cyan" id="process-eta">--:--</span>
+                            </div>
+                        </div>
+
+                        <!-- Linear Progress Bar -->
+                        <div class="progress-bar-bg">
+                            <div id="process-linear-bar" class="progress-bar-fill"></div>
+                        </div>
+                        
+                        <div class="mt-8">
+                            <button id="btn-cancel-process" class="btn btn-danger">Cancel Processing</button>
+                            <p id="cancel-confirm-msg" class="text-small text-danger mt-2 hidden">Click again to confirm cancellation</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 5: PREVIEW & OUTPUT -->
+            <section id="step-output" class="step-section hidden">
+                <div class="success-banner mb-6">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <h2>Processing Complete</h2>
+                </div>
+
+                <div class="card mb-6">
+                    <h3>Preview (First 5 seconds)</h3>
+                    <div class="video-wrapper mt-4">
+                        <video id="preview-video" autoplay muted loop playsinline></video>
+                        
+                        <!-- Custom Controls -->
+                        <div class="custom-controls">
+                            <button id="btn-play-pause" class="control-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>
+                            </button>
+                            <input type="range" id="video-timeline" class="timeline-slider" value="0" min="0" max="100">
+                            <button id="btn-mute" class="control-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card text-center">
+                    <h3 class="mb-4">Download Video</h3>
+                    
+                    <div class="format-selector mb-6">
+                        <label class="radio-label">
+                            <input type="radio" name="format" value="mp4" checked>
+                            <span class="radio-custom"></span>
+                            MP4 (H.264)
+                        </label>
+                        <label class="radio-label ml-4">
+                            <input type="radio" name="format" value="webm">
+                            <span class="radio-custom"></span>
+                            WebM (VP9)
+                        </label>
+                    </div>
+
+                    <div class="flex-center gap-4">
+                        <button id="btn-reprocess" class="btn btn-secondary">Re-process (New Settings)</button>
+                        <button id="btn-download" class="btn btn-primary btn-lg shine-effect">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                            Download Video
+                        </button>
+                    </div>
+                    
+                    <p id="reprocess-confirm-msg" class="text-small text-danger mt-2 hidden">Click again to confirm</p>
+
+                    <div id="cleanup-warning" class="mt-6 p-4 bg-darker rounded border-red hidden">
+                        <p class="text-small text-danger flex-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            File will be permanently deleted in <span id="cleanup-timer" class="font-mono font-bold">05:00</span>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/fabric.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/uploader.js"></script>
+    <script src="/static/js/canvas.js"></script>
+    <script src="/static/js/player.js"></script>
+</body>
+</html>
